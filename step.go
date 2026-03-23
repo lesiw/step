@@ -185,24 +185,26 @@ func Do[T any](ctx context.Context, fn Func[T], handlers ...Handler) error {
 	return nil
 }
 
-// Name returns the name of a step function.
+// Name returns the short name of a step function.
 func Name[T any](fn Func[T]) string {
-	// This use of reflect does not affect dead code elimination.
-	// As of Go 1.26, the linker only disables DCE when it sees
-	// reflect.Value.Method or reflect.Type.MethodByName (flagged
-	// REFLECTMETHOD); Pointer does not trigger that path.
-	// See cmd/link/internal/ld/deadcode.go.
-	s := strings.Split(
-		runtime.FuncForPC(
-			reflect.ValueOf(fn).Pointer(),
-		).Name(), ".",
-	)
+	s := strings.Split(fullName(fn), ".")
 	return strings.TrimSuffix(s[len(s)-1], "-fm")
 }
 
 // Equal reports whether two step functions refer to the same function. The
 // type parameter ensures both functions belong to the same state machine.
-func Equal[T any](a, b Func[T]) bool { return Name(a) == Name(b) }
+// Equal compares fully qualified runtime names, so identically named
+// functions in different packages are not considered equal.
+func Equal[T any](a, b Func[T]) bool { return fullName(a) == fullName(b) }
+
+func fullName[T any](fn Func[T]) string {
+	// This use of reflect does not affect dead code elimination.
+	// As of Go 1.26, the linker only disables DCE when it sees
+	// reflect.Value.Method or reflect.Type.MethodByName (flagged
+	// REFLECTMETHOD); Pointer does not trigger that path.
+	// See cmd/link/internal/ld/deadcode.go.
+	return runtime.FuncForPC(reflect.ValueOf(fn).Pointer()).Name()
+}
 
 // Log returns a [Handler] that writes step results to w. Passed steps are
 // prefixed with a check mark; failed steps are prefixed with an X followed
