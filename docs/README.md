@@ -69,6 +69,26 @@ if stepErr, ok := errors.AsType[*step.Error](err); ok {
 
 `Do` also checks for context cancellation before each step.
 
+To signal a non-fatal condition, wrap the error with `Continue`:
+
+```go
+func (d *deploy) install(context.Context) (step.Func[deploy], error) {
+	if !d.needsInstall {
+		return d.configure, step.Continue(fmt.Errorf("skip"))
+	}
+	// ... do the install ...
+}
+```
+
+`Do` passes `Continue` errors to handlers but does not stop the
+sequence. `Log` prints continued steps with ⊘:
+
+```
+✔ detectOS
+⊘ install: skip
+✔ configure
+```
+
 ## Handlers
 
 A `Handler` receives step completion events. `Log` provides a default

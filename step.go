@@ -57,6 +57,23 @@
 //
 // [Do] also checks for context cancellation before each step.
 //
+// To signal a non-fatal condition, wrap the error with [Continue]:
+//
+//	func (d *deploy) install(context.Context) (step.Func[deploy], error) {
+//		if !d.needsInstall {
+//			return d.configure, step.Continue(fmt.Errorf("skip"))
+//		}
+//		// ... do the install ...
+//	}
+//
+// [Do] passes [Continue] errors to handlers but does not stop the
+// sequence. Handlers can inspect the underlying error to decide how to
+// render it. [Log] prints continued steps with ⊘:
+//
+//	✔ detectOS
+//	⊘ install: skip
+//	✔ configure
+//
 // # Handlers
 //
 // A [Handler] receives step completion events. [Log] provides a default
@@ -120,6 +137,7 @@ package step
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -149,6 +167,28 @@ type Error struct {
 func (e *Error) Error() string { return e.Name + ": " + e.error.Error() }
 func (e *Error) Unwrap() error { return e.error }
 
+// Continue wraps an error to indicate that the sequence should not stop.
+// When a step returns an error wrapped with Continue, [Do] passes it to
+// handlers but continues to the next step instead of returning. This
+// allows custom non-fatal signals like skip or warn:
+//
+//	var Skip = step.Continue(fmt.Errorf("skip"))
+//
+// Handlers can inspect the underlying error with [errors.Is] or
+// [errors.As]:
+//
+//	func handle(i step.Info, err error) {
+//		if errors.Is(err, Skip) {
+//			fmt.Printf("⊘ %s\n", i.Name)
+//		}
+//	}
+func Continue(err error) error { return &continueError{err: err} }
+
+type continueError struct{ err error }
+
+func (c *continueError) Error() string { return c.err.Error() }
+func (c *continueError) Unwrap() error { return c.err }
+
 // Handler handles step completion events.
 type Handler interface {
 	Handle(Info, error)
@@ -163,7 +203,9 @@ func (f HandlerFunc) Handle(i Info, err error) { f(i, err) }
 
 // Do executes a state machine starting from fn. It checks for context
 // cancellation before each step and stops on the first non-nil error.
-// Handlers are called in order after each step.
+// If the error wraps [Continue], handlers are called but the sequence
+// continues to the next step. Handlers are called in order after each
+// step.
 func Do[T any](ctx context.Context, fn Func[T], handlers ...Handler) error {
 	for fn != nil {
 		if err := ctx.Err(); err != nil {
@@ -178,7 +220,7 @@ func Do[T any](ctx context.Context, fn Func[T], handlers ...Handler) error {
 		for _, h := range handlers {
 			h.Handle(i, err)
 		}
-		if err != nil {
+		if ce := new(continueError); err != nil && !errors.As(err, &ce) {
 			return err
 		}
 	}
@@ -206,17 +248,21 @@ func fullName[T any](fn Func[T]) string {
 	return runtime.FuncForPC(reflect.ValueOf(fn).Pointer()).Name()
 }
 
-// Log returns a [Handler] that writes step results to w. Passed steps are
-// prefixed with a check mark; failed steps are prefixed with an X followed
-// by the error.
+// Log returns a [Handler] that writes step results to w.
+//
+//	✔ passed step
+//	✘ failed step: error message
+//	⊘ continued step: error message
 //
 //ignore:errcheck
 func Log(w io.Writer) Handler {
 	return HandlerFunc(func(i Info, err error) {
-		if err != nil {
-			fmt.Fprintf(w, "✘ %s\n", err)
-		} else {
+		if ce := new(continueError); err == nil {
 			fmt.Fprintf(w, "✔ %s\n", i.Name)
+		} else if errors.As(err, &ce) {
+			fmt.Fprintf(w, "⊘ %s: %s\n", i.Name, ce.err)
+		} else {
+			fmt.Fprintf(w, "✘ %s\n", err)
 		}
 	})
 }

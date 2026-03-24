@@ -2,6 +2,8 @@ package step_test
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 
 	"lesiw.io/step"
@@ -116,5 +118,71 @@ func TestEqualDifferent(t *testing.T) {
 	var d deploy
 	if step.Equal(d.detectOS, d.installLinux) {
 		t.Error("different functions equal")
+	}
+}
+
+var errSkip = step.Continue(fmt.Errorf("skip"))
+
+type skipper bool
+
+func (s *skipper) step1(context.Context) (step.Func[skipper], error) {
+	return s.step2, nil
+}
+
+func (s *skipper) step2(context.Context) (step.Func[skipper], error) {
+	*s = true
+	return s.step3, errSkip
+}
+
+func (s *skipper) step3(context.Context) (step.Func[skipper], error) {
+	return nil, nil
+}
+
+func TestContinueError(t *testing.T) {
+	var s skipper
+	err := step.Do(t.Context(), s.step1)
+	if err != nil {
+		t.Fatalf("Do err: %v", err)
+	}
+	if !s {
+		t.Error("step2 was not reached")
+	}
+}
+
+func TestContinueErrorHandlerReceivesError(t *testing.T) {
+	var s skipper
+	var got error
+	h := step.HandlerFunc(func(i step.Info, err error) {
+		if i.Name == "step2" {
+			got = err
+		}
+	})
+	err := step.Do(t.Context(), s.step1, h)
+	if err != nil {
+		t.Fatalf("Do err: %v", err)
+	}
+	if got == nil {
+		t.Fatal("handler did not receive error for step2")
+	}
+	if !errors.Is(got, errSkip) {
+		t.Errorf("got %v, want %v", got, errSkip)
+	}
+}
+
+type failer struct{}
+
+func (f failer) step1(context.Context) (step.Func[failer], error) {
+	return f.step2, nil
+}
+
+func (f failer) step2(context.Context) (step.Func[failer], error) {
+	return nil, fmt.Errorf("fatal error")
+}
+
+func TestNonContinueErrorStops(t *testing.T) {
+	var f failer
+	err := step.Do(t.Context(), f.step1)
+	if err == nil {
+		t.Fatal("expected error")
 	}
 }
