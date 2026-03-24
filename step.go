@@ -197,19 +197,17 @@ func (f HandlerFunc) Handle(i Info, err error) { f(i, err) }
 // If the error wraps [Continue], handlers are called but the sequence
 // continues to the next step. Handlers are called in order after each
 // step.
-func Do[T any](ctx context.Context, fn Func[T], handlers ...Handler) error {
-	for fn != nil {
-		if err := ctx.Err(); err != nil {
+func Do[T any](ctx context.Context, f Func[T], h ...Handler) (err error) {
+	for f != nil {
+		if err = ctx.Err(); err != nil {
 			return err
 		}
-		i := Info{Name: Name(fn)}
-		var err error
-		fn, err = fn(ctx)
-		if err != nil {
+		i := Info{Name: Name(f)}
+		if f, err = f(ctx); err != nil {
 			err = &Error{Info: i, error: err}
 		}
-		for _, h := range handlers {
-			h.Handle(i, err)
+		for _, handler := range h {
+			handler.Handle(i, err)
 		}
 		if ce := new(continueError); err != nil && !errors.As(err, &ce) {
 			return err
