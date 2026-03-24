@@ -2,7 +2,7 @@
 
 [![Go Reference](https://pkg.go.dev/badge/lesiw.io/step.svg)](https://pkg.go.dev/lesiw.io/step)
 
-Package step runs sequences built from functions.
+Package step runs sequences of step functions.
 
 A step is a function that receives a context and returns the next step
 to run. Step functions are typically defined as methods on a state

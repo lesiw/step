@@ -1,4 +1,4 @@
-// Package lesiw.io/step runs sequences built from functions.
+// Package lesiw.io/step runs sequences of step functions.
 //
 // A step is a function that receives a context and returns the next step
 // to run. Step functions are typically defined as methods on a state type,
