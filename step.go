@@ -1,4 +1,4 @@
-// Package lesiw.io/step runs state machines built from functions.
+// Package lesiw.io/step runs sequences built from functions.
 //
 // A step is a function that receives a context and returns the next step
 // to run. Step functions are typically defined as methods on a state type,
@@ -24,7 +24,7 @@
 //		return nil, nil
 //	}
 //
-// Run the machine by passing a context and the first step:
+// Run the sequence by passing a context and the first step:
 //
 //	var e etl
 //	if err := step.Do(ctx, e.extract); err != nil {
@@ -106,18 +106,9 @@
 //		e.Reset()
 //	}
 //
-// # Stateless Steps
-//
-// Steps do not require a state type. Plain functions work with any type
-// parameter:
-//
-//	func fetch(context.Context) (step.Func[any], error) {
-//		return process, nil
-//	}
-//
 // # Testing
 //
-// Use [Equal] and [Name] to test state transitions:
+// Use [Equal] and [Name] to test transitions:
 //
 //	func TestDetectLinux(t *testing.T) {
 //		d := &deploy{os: "linux"}
@@ -145,9 +136,9 @@ import (
 	"strings"
 )
 
-// Func is a step in a state machine. Each step receives a context and
-// returns the next step to run or nil to stop. Step functions are typically
-// methods on a state type, bound as method values:
+// Func is a step in a sequence. Each step receives a context and returns
+// the next step to run or nil to stop. Step functions are typically methods
+// on a state type, bound as method values:
 //
 //	step.Do(ctx, e.extract)
 type Func[T any] func(context.Context) (Func[T], error)
@@ -201,7 +192,7 @@ type HandlerFunc func(Info, error)
 // Handle calls f(i, err).
 func (f HandlerFunc) Handle(i Info, err error) { f(i, err) }
 
-// Do executes a state machine starting from fn. It checks for context
+// Do executes a sequence starting from fn. It checks for context
 // cancellation before each step and stops on the first non-nil error.
 // If the error wraps [Continue], handlers are called but the sequence
 // continues to the next step. Handlers are called in order after each
@@ -234,7 +225,7 @@ func Name[T any](fn Func[T]) string {
 }
 
 // Equal reports whether two step functions refer to the same function. The
-// type parameter ensures both functions belong to the same state machine.
+// type parameter ensures both functions belong to the same sequence.
 // Equal compares fully qualified runtime names, so identically named
 // functions in different packages are not considered equal.
 func Equal[T any](a, b Func[T]) bool { return fullName(a) == fullName(b) }

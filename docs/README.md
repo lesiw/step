@@ -2,7 +2,7 @@
 
 [![Go Reference](https://pkg.go.dev/badge/lesiw.io/step.svg)](https://pkg.go.dev/lesiw.io/step)
 
-Package step runs state machines built from functions.
+Package step runs sequences built from functions.
 
 A step is a function that receives a context and returns the next step
 to run. Step functions are typically defined as methods on a state
@@ -30,7 +30,7 @@ func (e *etl) load(context.Context) (step.Func[etl], error) {
 }
 ```
 
-Run the machine by passing a context and the first step:
+Run the sequence by passing a context and the first step:
 
 ```go
 var e etl
@@ -129,20 +129,9 @@ func (e *etl) handle(i step.Info, err error) {
 }
 ```
 
-## Stateless Steps
-
-Steps do not require a state type. Plain functions work with any type
-parameter:
-
-```go
-func fetch(context.Context) (step.Func[any], error) {
-	return process, nil
-}
-```
-
 ## Testing
 
-Use `Equal` and `Name` to test state transitions:
+Use `Equal` and `Name` to test transitions:
 
 ```go
 func TestDetectLinux(t *testing.T) {
