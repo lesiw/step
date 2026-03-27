@@ -57,8 +57,10 @@ func (d *deploy) install(context.Context) (step.Func[deploy], error) {
 
 ## Error Handling
 
-When a step returns a non-nil error, `Do` wraps it in `*Error` with
-the step name:
+The returned function controls whether the sequence continues
+(non-nil) or stops (nil). The returned error is passed to handlers.
+
+`Do` may return an `*Error` containing the step name:
 
 ```go
 err := step.Do(ctx, e.extract)
@@ -69,19 +71,8 @@ if stepErr, ok := errors.AsType[*step.Error](err); ok {
 
 `Do` also checks for context cancellation before each step.
 
-To signal a non-fatal condition, wrap the error with `Continue`:
-
-```go
-func (d *deploy) install(context.Context) (step.Func[deploy], error) {
-    if !d.needsInstall {
-        return d.configure, step.Continue(fmt.Errorf("skip"))
-    }
-    // ... do the install ...
-}
-```
-
-`Do` passes `Continue` errors to handlers but does not stop the
-sequence. `Log` prints continued steps with ⊘:
+When a step returns an error but the sequence does not stop, `Log`
+renders it with ⊘:
 
 ```
 ✔ download
@@ -121,8 +112,8 @@ type etl struct {
     parsed []string
 }
 
-func (e *etl) handle(i step.Info, err error) {
-    if err != nil {
+func (e *etl) handle(i step.Info) {
+    if i.Err != nil {
         io.Copy(os.Stderr, e)
     }
     e.Reset()

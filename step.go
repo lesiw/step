@@ -47,8 +47,10 @@
 //
 // # Error Handling
 //
-// When a step returns a non-nil error, [Do] wraps it in [*Error] with the
-// step name:
+// The returned function controls whether the sequence continues (non-nil)
+// or stops (nil). The returned error is passed to handlers.
+//
+// [Do] may return an [*Error] containing the step name:
 //
 //	err := step.Do(ctx, e.extract)
 //	if stepErr, ok := errors.AsType[*step.Error](err); ok {
@@ -57,18 +59,8 @@
 //
 // [Do] also checks for context cancellation before each step.
 //
-// To signal a non-fatal condition, wrap the error with [Continue]:
-//
-//	func (d *deploy) install(context.Context) (step.Func[deploy], error) {
-//		if !d.needsInstall {
-//			return d.configure, step.Continue(fmt.Errorf("skip"))
-//		}
-//		// ... do the install ...
-//	}
-//
-// [Do] passes [Continue] errors to handlers but does not stop the
-// sequence. Handlers can inspect the underlying error to decide how to
-// render it. [Log] prints continued steps with ⊘:
+// When a step returns an error but the sequence does not stop, [Log]
+// renders it with ⊘:
 //
 //	✔ download
 //	⊘ install: skip
@@ -99,8 +91,8 @@
 //		parsed []string
 //	}
 //
-//	func (e *etl) handle(i step.Info, err error) {
-//		if err != nil {
+//	func (e *etl) handle(i step.Info) {
+//		if i.Err != nil {
 //			io.Copy(os.Stderr, e)
 //		}
 //		e.Reset()
@@ -128,7 +120,6 @@ package step
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -137,80 +128,58 @@ import (
 )
 
 // Func is a step in a sequence. Each step receives a context and returns
-// the next step to run or nil to stop. Step functions are typically methods
-// on a state type, bound as method values:
+// the next step to run or nil to stop. Step functions are typically
+// methods on a state type, bound as method values:
 //
 //	step.Do(ctx, e.extract)
 type Func[T any] func(context.Context) (Func[T], error)
 
-// Info holds metadata about a step.
+// Info holds metadata about a completed step.
 type Info struct {
 	// Name is the name of the step function.
 	Name string
+	// Next is the name of the next step, if any.
+	Next string
+	// Err is the error returned by the step, if any.
+	Err error
 }
 
 // Error is the error type returned by [Do] when a step fails.
-type Error struct {
-	Info
-	error
-}
+type Error Info
 
-func (e *Error) Error() string { return e.Name + ": " + e.error.Error() }
-func (e *Error) Unwrap() error { return e.error }
-
-// Continue wraps an error to indicate that the sequence should not stop.
-// When a step returns an error wrapped with Continue, [Do] passes it to
-// handlers but continues to the next step instead of returning. This
-// allows custom non-fatal signals like skip or warn:
-//
-//	var Skip = step.Continue(fmt.Errorf("skip"))
-//
-// Handlers can inspect the underlying error with [errors.Is] or
-// [errors.As]:
-//
-//	func handle(i step.Info, err error) {
-//		if errors.Is(err, Skip) {
-//			fmt.Printf("⊘ %s\n", i.Name)
-//		}
-//	}
-func Continue(err error) error { return &continueError{err: err} }
-
-type continueError struct{ err error }
-
-func (c *continueError) Error() string { return c.err.Error() }
-func (c *continueError) Unwrap() error { return c.err }
+func (e *Error) Error() string { return e.Name + ": " + e.Err.Error() }
+func (e *Error) Unwrap() error { return e.Err }
 
 // Handler handles step completion events.
 type Handler interface {
-	Handle(Info, error)
+	Handle(Info)
 }
 
-// HandlerFunc is an adapter to allow the use of ordinary functions as step
-// handlers.
-type HandlerFunc func(Info, error)
+// HandlerFunc is an adapter to allow the use of ordinary functions as
+// step handlers.
+type HandlerFunc func(Info)
 
-// Handle calls f(i, err).
-func (f HandlerFunc) Handle(i Info, err error) { f(i, err) }
+// Handle calls f(i).
+func (f HandlerFunc) Handle(i Info) { f(i) }
 
 // Do executes a sequence starting from fn. It checks for context
-// cancellation before each step and stops on the first non-nil error.
-// If the error wraps [Continue], handlers are called but the sequence
-// continues to the next step. Handlers are called in order after each
-// step.
+// cancellation before each step. The returned function controls whether
+// the sequence continues (non-nil) or stops (nil). The returned error
+// is passed to handlers. Handlers are called in order after each step.
 func Do[T any](ctx context.Context, f Func[T], h ...Handler) (err error) {
 	for f != nil {
 		if err = ctx.Err(); err != nil {
 			return err
 		}
 		i := Info{Name: Name(f)}
-		if f, err = f(ctx); err != nil {
-			err = &Error{Info: i, error: err}
-		}
+		f, i.Err = f(ctx)
+		i.Next = Name(f)
 		for _, handler := range h {
-			handler.Handle(i, err)
+			handler.Handle(i)
 		}
-		if ce := new(continueError); err != nil && !errors.As(err, &ce) {
-			return err
+		if f == nil && i.Err != nil {
+			e := Error(i)
+			return &e
 		}
 	}
 	return nil
@@ -218,12 +187,15 @@ func Do[T any](ctx context.Context, f Func[T], h ...Handler) (err error) {
 
 // Name returns the short name of a step function.
 func Name[T any](fn Func[T]) string {
+	if fn == nil {
+		return ""
+	}
 	s := strings.Split(fullName(fn), ".")
 	return strings.TrimSuffix(s[len(s)-1], "-fm")
 }
 
-// Equal reports whether two step functions refer to the same function. The
-// type parameter ensures both functions belong to the same sequence.
+// Equal reports whether two step functions refer to the same function.
+// The type parameter ensures both functions belong to the same sequence.
 // Equal compares fully qualified runtime names, so identically named
 // functions in different packages are not considered equal.
 func Equal[T any](a, b Func[T]) bool { return fullName(a) == fullName(b) }
@@ -245,13 +217,13 @@ func fullName[T any](fn Func[T]) string {
 //
 //ignore:errcheck
 func Log(w io.Writer) Handler {
-	return HandlerFunc(func(i Info, err error) {
-		if ce := new(continueError); err == nil {
+	return HandlerFunc(func(i Info) {
+		if i.Err == nil {
 			fmt.Fprintf(w, "✔ %s\n", i.Name)
-		} else if errors.As(err, &ce) {
-			fmt.Fprintf(w, "⊘ %s: %s\n", i.Name, ce.err)
+		} else if i.Next != "" {
+			fmt.Fprintf(w, "⊘ %s: %s\n", i.Name, i.Err)
 		} else {
-			fmt.Fprintf(w, "✘ %s\n", err)
+			fmt.Fprintf(w, "✘ %s: %s\n", i.Name, i.Err)
 		}
 	})
 }

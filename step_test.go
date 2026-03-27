@@ -9,83 +9,62 @@ import (
 	"lesiw.io/step"
 )
 
-type deploy struct {
-	os string
-}
+type seq struct{ path string }
 
-func (d *deploy) detectOS(context.Context) (step.Func[deploy], error) {
-	switch d.os {
-	case "linux":
-		return d.installLinux, nil
-	case "darwin":
-		return d.installDarwin, nil
+func (s *seq) start(context.Context) (step.Func[seq], error) {
+	switch s.path {
+	case "a":
+		return s.stepA, nil
+	case "b":
+		return s.stepB, nil
 	}
 	return nil, nil
 }
 
-func (d *deploy) installLinux(context.Context) (step.Func[deploy], error) {
-	return d.deploy, nil
+func (s *seq) stepA(context.Context) (step.Func[seq], error) {
+	return s.end, nil
 }
 
-func (d *deploy) installDarwin(context.Context) (step.Func[deploy], error) {
-	return d.deploy, nil
+func (s *seq) stepB(context.Context) (step.Func[seq], error) {
+	return s.end, nil
 }
 
-func (d *deploy) deploy(context.Context) (step.Func[deploy], error) {
+func (s *seq) end(context.Context) (step.Func[seq], error) {
 	return nil, nil
 }
 
-func TestDetectLinux(t *testing.T) {
-	d := &deploy{os: "linux"}
-	got, err := d.detectOS(t.Context())
+func TestTransition(t *testing.T) {
+	s := &seq{path: "a"}
+	got, err := s.start(t.Context())
 	if err != nil {
-		t.Fatalf("detectOS err: %v", err)
+		t.Fatalf("start err: %v", err)
 	}
-	if want := d.installLinux; !step.Equal(got, want) {
-		t.Errorf("got %s, want %s", step.Name(got), step.Name(want))
+	if want := s.stepA; !step.Equal(got, want) {
+		t.Errorf(
+			"got %s, want %s",
+			step.Name(got), step.Name(want),
+		)
 	}
 }
 
-func TestDetectDarwin(t *testing.T) {
-	d := &deploy{os: "darwin"}
-	got, err := d.detectOS(t.Context())
+func TestTransitionNil(t *testing.T) {
+	s := &seq{path: "x"}
+	got, err := s.start(t.Context())
 	if err != nil {
-		t.Fatalf("detectOS err: %v", err)
-	}
-	if want := d.installDarwin; !step.Equal(got, want) {
-		t.Errorf("got %s, want %s", step.Name(got), step.Name(want))
-	}
-}
-
-func TestDetectUnknown(t *testing.T) {
-	d := &deploy{os: "plan9"}
-	got, err := d.detectOS(t.Context())
-	if err != nil {
-		t.Fatalf("detectOS err: %v", err)
+		t.Fatalf("start err: %v", err)
 	}
 	if got != nil {
 		t.Errorf("got %s, want nil", step.Name(got))
 	}
 }
 
-func TestInstallLinux(t *testing.T) {
-	var d deploy
-	got, err := d.installLinux(t.Context())
-	if err != nil {
-		t.Fatalf("installLinux err: %v", err)
-	}
-	if want := d.deploy; !step.Equal(got, want) {
-		t.Errorf("got %s, want %s", step.Name(got), step.Name(want))
-	}
-}
-
 func TestNameMethod(t *testing.T) {
-	var d deploy
-	tests := map[string]step.Func[deploy]{
-		"detectOS":      d.detectOS,
-		"installLinux":  d.installLinux,
-		"installDarwin": d.installDarwin,
-		"deploy":        d.deploy,
+	var s seq
+	tests := map[string]step.Func[seq]{
+		"start": s.start,
+		"stepA": s.stepA,
+		"stepB": s.stepB,
+		"end":   s.end,
 	}
 	for want, fn := range tests {
 		if got := step.Name(fn); got != want {
@@ -99,6 +78,7 @@ func TestNamePlain(t *testing.T) {
 		"fetch":   fetch,
 		"process": process,
 		"store":   store,
+		"":        nil,
 	}
 	for want, fn := range tests {
 		if got := step.Name(fn); got != want {
@@ -107,21 +87,15 @@ func TestNamePlain(t *testing.T) {
 	}
 }
 
-func TestEqualSame(t *testing.T) {
-	var d deploy
-	if !step.Equal(d.detectOS, d.detectOS) {
+func TestEqual(t *testing.T) {
+	var s seq
+	if !step.Equal(s.start, s.start) {
 		t.Error("same function not equal")
 	}
-}
-
-func TestEqualDifferent(t *testing.T) {
-	var d deploy
-	if step.Equal(d.detectOS, d.installLinux) {
+	if step.Equal(s.start, s.stepA) {
 		t.Error("different functions equal")
 	}
 }
-
-var errSkip = step.Continue(fmt.Errorf("skip"))
 
 type skipper bool
 
@@ -131,41 +105,33 @@ func (s *skipper) step1(context.Context) (step.Func[skipper], error) {
 
 func (s *skipper) step2(context.Context) (step.Func[skipper], error) {
 	*s = true
-	return s.step3, errSkip
+	return s.step3, fmt.Errorf("skip")
 }
 
 func (s *skipper) step3(context.Context) (step.Func[skipper], error) {
 	return nil, nil
 }
 
-func TestContinueError(t *testing.T) {
+func TestNonFatalError(t *testing.T) {
 	var s skipper
-	err := step.Do(t.Context(), s.step1)
-	if err != nil {
-		t.Fatalf("Do err: %v", err)
-	}
-	if !s {
-		t.Error("step2 was not reached")
-	}
-}
-
-func TestContinueErrorHandlerReceivesError(t *testing.T) {
-	var s skipper
-	var got error
-	h := step.HandlerFunc(func(i step.Info, err error) {
+	var got step.Info
+	h := step.HandlerFunc(func(i step.Info) {
 		if i.Name == "step2" {
-			got = err
+			got = i
 		}
 	})
 	err := step.Do(t.Context(), s.step1, h)
 	if err != nil {
 		t.Fatalf("Do err: %v", err)
 	}
-	if got == nil {
-		t.Fatal("handler did not receive error for step2")
+	if !s {
+		t.Error("step2 was not reached")
 	}
-	if !errors.Is(got, errSkip) {
-		t.Errorf("got %v, want %v", got, errSkip)
+	if got.Err == nil {
+		t.Fatal("handler did not receive error")
+	}
+	if got.Next == "" {
+		t.Error("expected non-empty Next for non-fatal step")
 	}
 }
 
@@ -179,10 +145,30 @@ func (f failer) step2(context.Context) (step.Func[failer], error) {
 	return nil, fmt.Errorf("fatal error")
 }
 
-func TestNonContinueErrorStops(t *testing.T) {
+func TestFatalError(t *testing.T) {
 	var f failer
-	err := step.Do(t.Context(), f.step1)
+	var got step.Info
+	h := step.HandlerFunc(func(i step.Info) {
+		if i.Name == "step2" {
+			got = i
+		}
+	})
+	err := step.Do(t.Context(), f.step1, h)
 	if err == nil {
 		t.Fatal("expected error")
+	}
+	var stepErr *step.Error
+	if !errors.As(err, &stepErr) {
+		t.Fatalf("expected *step.Error, got %T", err)
+	}
+	if stepErr.Name != "step2" {
+		t.Errorf("Error.Name: got %q, want %q",
+			stepErr.Name, "step2")
+	}
+	if got.Err == nil {
+		t.Fatal("handler did not receive error")
+	}
+	if got.Next != "" {
+		t.Errorf("expected empty Next, got %q", got.Next)
 	}
 }
