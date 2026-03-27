@@ -35,7 +35,7 @@
 //
 // Steps can branch by returning different functions:
 //
-//	func (d *deploy) detectOS(context.Context) (step.Func[deploy], error) {
+//	func (d *deploy) install(context.Context) (step.Func[deploy], error) {
 //		switch d.os {
 //		case "linux":
 //			return d.installLinux, nil
@@ -70,7 +70,7 @@
 // sequence. Handlers can inspect the underlying error to decide how to
 // render it. [Log] prints continued steps with ⊘:
 //
-//	✔ detectOS
+//	✔ download
 //	⊘ install: skip
 //	✔ configure
 //
@@ -110,11 +110,11 @@
 //
 // Use [Equal] and [Name] to test transitions:
 //
-//	func TestDetectLinux(t *testing.T) {
+//	func TestInstallLinux(t *testing.T) {
 //		d := &deploy{os: "linux"}
-//		got, err := d.detectOS(t.Context())
+//		got, err := d.install(t.Context())
 //		if err != nil {
-//			t.Fatalf("detectOS err: %v", err)
+//			t.Fatalf("install err: %v", err)
 //		}
 //		if want := d.installLinux; !step.Equal(got, want) {
 //			t.Errorf("got %s, want %s", step.Name(got), step.Name(want))

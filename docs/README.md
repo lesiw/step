@@ -44,7 +44,7 @@ if err := step.Do(ctx, e.extract); err != nil {
 Steps can branch by returning different functions:
 
 ```go
-func (d *deploy) detectOS(context.Context) (step.Func[deploy], error) {
+func (d *deploy) install(context.Context) (step.Func[deploy], error) {
     switch d.os {
     case "linux":
         return d.installLinux, nil
@@ -84,7 +84,7 @@ func (d *deploy) install(context.Context) (step.Func[deploy], error) {
 sequence. `Log` prints continued steps with ⊘:
 
 ```
-✔ detectOS
+✔ download
 ⊘ install: skip
 ✔ configure
 ```
@@ -134,11 +134,11 @@ func (e *etl) handle(i step.Info, err error) {
 Use `Equal` and `Name` to test transitions:
 
 ```go
-func TestDetectLinux(t *testing.T) {
+func TestInstallLinux(t *testing.T) {
     d := &deploy{os: "linux"}
-    got, err := d.detectOS(t.Context())
+    got, err := d.install(t.Context())
     if err != nil {
-        t.Fatalf("detectOS err: %v", err)
+        t.Fatalf("install err: %v", err)
     }
     if want := d.installLinux; !step.Equal(got, want) {
         t.Errorf("got %s, want %s", step.Name(got), step.Name(want))
