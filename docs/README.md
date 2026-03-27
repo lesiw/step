@@ -10,23 +10,23 @@ type, then passed to `Do` as method values:
 
 ```go
 type etl struct {
-	raw    []byte
-	parsed []string
+    raw    []byte
+    parsed []string
 }
 
 func (e *etl) extract(context.Context) (step.Func[etl], error) {
-	e.raw = []byte("a,b,c")
-	return e.transform, nil
+    e.raw = []byte("a,b,c")
+    return e.transform, nil
 }
 
 func (e *etl) transform(context.Context) (step.Func[etl], error) {
-	e.parsed = strings.Split(string(e.raw), ",")
-	return e.load, nil
+    e.parsed = strings.Split(string(e.raw), ",")
+    return e.load, nil
 }
 
 func (e *etl) load(context.Context) (step.Func[etl], error) {
-	fmt.Println(e.parsed)
-	return nil, nil
+    fmt.Println(e.parsed)
+    return nil, nil
 }
 ```
 
@@ -35,7 +35,7 @@ Run the sequence by passing a context and the first step:
 ```go
 var e etl
 if err := step.Do(ctx, e.extract); err != nil {
-	log.Fatal(err)
+    log.Fatal(err)
 }
 ```
 
@@ -45,13 +45,13 @@ Steps can branch by returning different functions:
 
 ```go
 func (d *deploy) detectOS(context.Context) (step.Func[deploy], error) {
-	switch d.os {
-	case "linux":
-		return d.installLinux, nil
-	case "darwin":
-		return d.installDarwin, nil
-	}
-	return nil, fmt.Errorf("unsupported OS: %s", d.os)
+    switch d.os {
+    case "linux":
+        return d.installLinux, nil
+    case "darwin":
+        return d.installDarwin, nil
+    }
+    return nil, fmt.Errorf("unsupported OS: %s", d.os)
 }
 ```
 
@@ -63,7 +63,7 @@ the step name:
 ```go
 err := step.Do(ctx, e.extract)
 if stepErr, ok := errors.AsType[*step.Error](err); ok {
-	fmt.Println("failed at:", stepErr.Name)
+    fmt.Println("failed at:", stepErr.Name)
 }
 ```
 
@@ -73,10 +73,10 @@ To signal a non-fatal condition, wrap the error with `Continue`:
 
 ```go
 func (d *deploy) install(context.Context) (step.Func[deploy], error) {
-	if !d.needsInstall {
-		return d.configure, step.Continue(fmt.Errorf("skip"))
-	}
-	// ... do the install ...
+    if !d.needsInstall {
+        return d.configure, step.Continue(fmt.Errorf("skip"))
+    }
+    // ... do the install ...
 }
 ```
 
@@ -116,16 +116,16 @@ where step output is captured and only shown on failure:
 
 ```go
 type etl struct {
-	bytes.Buffer
-	raw    []byte
-	parsed []string
+    bytes.Buffer
+    raw    []byte
+    parsed []string
 }
 
 func (e *etl) handle(i step.Info, err error) {
-	if err != nil {
-		io.Copy(os.Stderr, e)
-	}
-	e.Reset()
+    if err != nil {
+        io.Copy(os.Stderr, e)
+    }
+    e.Reset()
 }
 ```
 
@@ -135,14 +135,14 @@ Use `Equal` and `Name` to test transitions:
 
 ```go
 func TestDetectLinux(t *testing.T) {
-	d := &deploy{os: "linux"}
-	got, err := d.detectOS(t.Context())
-	if err != nil {
-		t.Fatalf("detectOS err: %v", err)
-	}
-	if want := d.installLinux; !step.Equal(got, want) {
-		t.Errorf("got %s, want %s", step.Name(got), step.Name(want))
-	}
+    d := &deploy{os: "linux"}
+    got, err := d.detectOS(t.Context())
+    if err != nil {
+        t.Fatalf("detectOS err: %v", err)
+    }
+    if want := d.installLinux; !step.Equal(got, want) {
+        t.Errorf("got %s, want %s", step.Name(got), step.Name(want))
+    }
 }
 ```
 
