@@ -56,13 +56,15 @@ func TestTransitionNil(t *testing.T) {
 }
 
 func TestNameMethod(t *testing.T) {
-	var s seq
-	tests := map[string]step.Func[seq]{
-		"start": s.start,
-		"stepA": s.stepA,
-		"stepB": s.stepB,
-		"end":   s.end,
-	}
+	var (
+		s     seq
+		tests = map[string]step.Func[seq]{
+			"start": s.start,
+			"stepA": s.stepA,
+			"stepB": s.stepB,
+			"end":   s.end,
+		}
+	)
 	for want, fn := range tests {
 		if got := step.Name(fn); got != want {
 			t.Errorf("Name: got %q, want %q", got, want)
@@ -110,13 +112,15 @@ func (s *skipper) step3(context.Context) (step.Func[skipper], error) {
 }
 
 func TestNonFatalError(t *testing.T) {
-	var s skipper
-	var got step.Info
-	h := step.HandlerFunc(func(i step.Info) {
-		if i.Name == "step2" {
-			got = i
-		}
-	})
+	var (
+		s   skipper
+		got step.Info
+		h   = step.HandlerFunc(func(i step.Info) {
+			if i.Name == "step2" {
+				got = i
+			}
+		})
+	)
 	err := step.Do(t.Context(), s.step1, h)
 	if err != nil {
 		t.Fatalf("Do err: %v", err)
@@ -143,13 +147,15 @@ func (f failer) step2(context.Context) (step.Func[failer], error) {
 }
 
 func TestFatalError(t *testing.T) {
-	var f failer
-	var got step.Info
-	h := step.HandlerFunc(func(i step.Info) {
-		if i.Name == "step2" {
-			got = i
-		}
-	})
+	var (
+		f   failer
+		got step.Info
+		h   = step.HandlerFunc(func(i step.Info) {
+			if i.Name == "step2" {
+				got = i
+			}
+		})
+	)
 	err := step.Do(t.Context(), f.step1, h)
 	if err == nil {
 		t.Fatal("expected error")
