@@ -9,10 +9,10 @@ import (
 	"lesiw.io/step"
 )
 
-type seq struct{ path string }
+type seq string
 
 func (s *seq) start(context.Context) (step.Func[seq], error) {
-	switch s.path {
+	switch *s {
 	case "a":
 		return s.stepA, nil
 	case "b":
@@ -34,7 +34,7 @@ func (s *seq) end(context.Context) (step.Func[seq], error) {
 }
 
 func TestTransition(t *testing.T) {
-	s := &seq{path: "a"}
+	s := seq("a")
 	got, err := s.start(t.Context())
 	if err != nil {
 		t.Fatalf("start err: %v", err)
@@ -45,7 +45,7 @@ func TestTransition(t *testing.T) {
 }
 
 func TestTransitionNil(t *testing.T) {
-	s := &seq{path: "x"}
+	s := seq("x")
 	got, err := s.start(t.Context())
 	if err != nil {
 		t.Fatalf("start err: %v", err)
