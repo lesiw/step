@@ -40,10 +40,7 @@ func TestTransition(t *testing.T) {
 		t.Fatalf("start err: %v", err)
 	}
 	if want := s.stepA; !step.Equal(got, want) {
-		t.Errorf(
-			"got %s, want %s",
-			step.Name(got), step.Name(want),
-		)
+		t.Errorf("got %s, want %s", step.Name(got), step.Name(want))
 	}
 }
 
@@ -162,8 +159,7 @@ func TestFatalError(t *testing.T) {
 		t.Fatalf("expected *step.Error, got %T", err)
 	}
 	if stepErr.Name != "step2" {
-		t.Errorf("Error.Name: got %q, want %q",
-			stepErr.Name, "step2")
+		t.Errorf("Error.Name: got %q, want %q", stepErr.Name, "step2")
 	}
 	if got.Err == nil {
 		t.Fatal("handler did not receive error")

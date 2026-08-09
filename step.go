@@ -138,8 +138,10 @@ type Func[T any] func(context.Context) (Func[T], error)
 type Info struct {
 	// Name is the name of the step function.
 	Name string
+
 	// Next is the name of the next step, if any.
 	Next string
+
 	// Err is the error returned by the step, if any.
 	Err error
 }
